@@ -10,7 +10,9 @@
 // (2026-10-09; the same crash later came without it). Asking again anyway after a Restart, the same evening, got the
 // event (0x0) but left the game unresponsive. The marker names the process by its id and the base of its heap
 // region: ids repeat after a reboot, the randomized heap base does not.
-#define VSYNC_MARKER "sdmc:/switch/bmherorecomp/.vsync_process"
+#include "nx_paths.h"
+
+#define VSYNC_MARKER BMHNX_DATA_DIR "/.vsync_process"
 
 static ViDisplay g_viDisplay;
 static ViLayer g_viLayer;

@@ -1,6 +1,6 @@
-// Switch entry point for Bomberman Hero: Recompiled. Mirrors src/main/main.cpp (same N64ModernRuntime API,
+// Switch entry point for Bomberman Hero (BMHero_nx). Mirrors src/main/main.cpp (same N64ModernRuntime API,
 // same positional recomp::start) without the PC frontend (RmlUi launcher, RT64, native file dialogs, texture
-// packs): the game boots straight from the ROM placed in sdmc:/switch/bmherorecomp/.
+// packs): the game boots straight from the ROM placed in sdmc:/switch/BMHero_nx/.
 // Derived from DK64Recomp-NX's main_switch.cpp (GPL-3.0).
 #include <algorithm>
 #include <array>
@@ -23,6 +23,7 @@
 #include "banjo_game.h"
 #include "nx_config.h"
 #include "nx_controls.h"
+#include "nx_paths.h"
 #include "nx_renderer.h"
 #include "nx_settings.h"
 #include "librecomp/game.hpp"
@@ -78,7 +79,7 @@ extern RspUcodeFunc n_aspMain;
 extern "C" unsigned long long bmhnx_ms_since_boot() { return armTicksToNs(armGetSystemTick()) / 1000000; }
 
 namespace {
-    const std::filesystem::path DATA_DIR = "sdmc:/switch/bmherorecomp";
+    const std::filesystem::path DATA_DIR = BMHNX_DATA_DIR;
     std::u8string GAME_ID = u8"bmhero";  // non-const: recomp::is_rom_valid/select_rom take std::u8string&
     // librecomp's --game switch looks games up by their mod id.
     char MOD_GAME_ID[] = "bmhero";
@@ -154,9 +155,9 @@ namespace {
         socketExit();
 #endif
         // Launched from hbmenu: keep a log on the SD card instead.
-        const std::string log_path = (DATA_DIR / "bmherorecomp.log").string();
+        const std::string log_path = (DATA_DIR / (std::string(BMHNX_APP_NAME) + ".log")).string();
         // The previous run's log survives one launch: after a crash, relaunching would otherwise erase its trace.
-        const std::string previous_path = (DATA_DIR / "bmherorecomp.prev.log").string();
+        const std::string previous_path = (DATA_DIR / (std::string(BMHNX_APP_NAME) + ".prev.log")).string();
         std::remove(previous_path.c_str());
         std::rename(log_path.c_str(), previous_path.c_str());
         freopen(log_path.c_str(), "w", stdout);
@@ -164,6 +165,45 @@ namespace {
         setvbuf(stdout, log_buffer, _IOFBF, sizeof(log_buffer));
         if (R_SUCCEEDED(threadCreate(&log_sync_thread, log_sync_loop, nullptr, nullptr, 0x4000, 0x3B, -2))) {
             threadStart(&log_sync_thread);
+        }
+    }
+
+    // Before the app was named BMHero_nx, everything it keeps (the ROM and its stored copy, config, saves, mods, markers)
+    // was in sdmc:/switch/bmherorecomp/. Moves what is there into the new folder, once: an entry that already exists in
+    // the new folder is left alone, and the old .nro and logs stay behind. The folder itself is left for the user to delete.
+    void migrate_old_data_dir() {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        const fs::path old_dir = BMHNX_OLD_DATA_DIR;
+        if (!fs::is_directory(old_dir, ec)) {
+            return;
+        }
+        std::vector<fs::path> entries;  // collected first: renaming while iterating can skip entries on FAT
+        for (const auto& entry : fs::directory_iterator(old_dir, ec)) {
+            const std::string extension = entry.path().extension().string();
+            if (extension != ".nro" && extension != ".log") {
+                entries.push_back(entry.path());
+            }
+        }
+        int moved = 0;
+        int kept = 0;
+        for (const fs::path& from : entries) {
+            const fs::path to = DATA_DIR / from.filename();
+            if (fs::exists(to, ec)) {
+                kept++;
+                continue;
+            }
+            fs::rename(from, to, ec);
+            if (ec) {
+                printf("[BMHNX] migrate: cannot move %s (%s)\n", from.c_str(), ec.message().c_str());
+                kept++;
+            } else {
+                moved++;
+            }
+        }
+        if (moved > 0 || kept > 0) {
+            printf("[BMHNX] migrate: %d item(s) moved from %s to %s, %d left where they were\n", moved, BMHNX_OLD_DATA_DIR,
+                   BMHNX_DATA_DIR, kept);
         }
     }
 
@@ -197,7 +237,7 @@ namespace {
         }
         recompui::message_box(
             "No valid Bomberman Hero ROM found.\n"
-            "Copy your NTSC-U (USA) 1.0 dump (.z64/.n64/.v64) to sdmc:/switch/bmherorecomp/");
+            "Copy your NTSC-U (USA) 1.0 dump (.z64/.n64/.v64) to " BMHNX_DATA_DIR "/");
         return false;
     }
 
@@ -231,7 +271,7 @@ namespace {
     ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::gfx_data_t) {
         step("create window");
         bmhnx_window_set_size(nx::screen_width(), nx::screen_height());
-        bmhnx_window = SDL_CreateWindow("Bomberman Hero: Recompiled", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        bmhnx_window = SDL_CreateWindow(BMHNX_DISPLAY_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                          nx::screen_width(), nx::screen_height(), SDL_WINDOW_OPENGL);
         if (bmhnx_window == nullptr) {
             fprintf(stderr, "[BMHNX] SDL_CreateWindow failed: %s\n", SDL_GetError());
@@ -392,6 +432,7 @@ namespace {
 
 // The .nro's path, for Restart Game (nx_menu.cpp).
 const char* bmhnx_program_path = nullptr;
+const char* bmhnx_mod_game_id = "bmhero";  // the id of the game entry's mod_game_id, for nx_mods.cpp
 
 extern "C" bool bmhnx_is_quitting() {
     return quitting.load();
@@ -405,8 +446,9 @@ int main(int argc, char** argv) {
     std::set_terminate(log_terminate);
     init_logging();
     // The build's date and time, so a log tells which .nro produced it (and the menu build from an older one).
-    printf("[BMHNX] Bomberman Hero: Recompiled %s for Switch, built %s %s, with pause menu, applet type %d (%llu ms)\n",
+    printf("[BMHNX] Bomberman Hero (" BMHNX_APP_NAME ") %s for Switch, built %s %s, with pause menu, applet type %d (%llu ms)\n",
            VERSION_STRING.c_str(), __DATE__, __TIME__, static_cast<int>(appletGetAppletType()), bmhnx_ms_since_boot());
+    migrate_old_data_dir();
     nx::config::load();
     bmhnx_perf_start();
 #ifdef BMHNX_REMOTE

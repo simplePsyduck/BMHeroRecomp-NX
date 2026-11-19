@@ -11,12 +11,13 @@
 #include "m64p_config.h"
 #include "m64p_types.h"
 #include "m64p_vidext.h"
+#include "nx_paths.h"
 #include "nx_settings.h"
 
 extern SDL_Window* bmhnx_window;
 
 namespace {
-    const char* const DATA_DIR = "sdmc:/switch/bmherorecomp";
+    const char* const DATA_DIR = BMHNX_DATA_DIR;
 
     struct Param {
         m64p_type type = M64TYPE_INT;

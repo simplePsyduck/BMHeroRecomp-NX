@@ -1,4 +1,4 @@
-// Options for the Switch build, saved to sdmc:/switch/bmherorecomp/nx_options.txt ("key = value" lines).
+// Options for the Switch build, the [settings] section of sdmc:/switch/BMHero_nx/config.ini ("key = value" lines).
 // The game reads them through the banjo::get_* getters (frontend_switch.cpp). Display options are read once at
 // startup; at_startup() returns the value the renderer is actually using.
 #pragma once
@@ -18,7 +18,6 @@ namespace nx {
         MasterVolume,
         BgmVolume,
         CutsceneAspect,   // banjo::CutsceneAspectRatioMode: 0 Original, 1 Clamp16x9, 2 Full
-        RenderDistance,   // chunks added around the camera in every direction (recomp_get_render_chunk_radius), live
         Count
     };
 

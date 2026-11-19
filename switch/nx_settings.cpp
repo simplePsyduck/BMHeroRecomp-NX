@@ -37,10 +37,6 @@ namespace {
         {"Display", "cutscene_aspect", "Cutscene Aspect Ratio",
          "Original keeps cutscenes at 4:3, Clamp 16:9 limits them to 16:9, Full uses the whole screen.",
          2, {"Original", "Clamp 16:9", "Full"}},
-        {"Display", "render_distance", "Extended Render Distance",
-         "Loads more of the stage around you, in every direction, so enemies and objects do not pop in at a distance "
-         "or at the sides of the wide view. Each step adds one more ring of chunks and can lower the frame rate.",
-         0, {"Off", "+1 chunk", "+2 chunks", "+3 chunks"}},
     };
 
     std::atomic<int> values[COUNT];

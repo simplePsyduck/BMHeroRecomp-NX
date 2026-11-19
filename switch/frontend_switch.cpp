@@ -10,6 +10,7 @@
 
 #include "banjo_config.h"
 #include "banjo_sound.h"
+#include "nx_paths.h"
 #include "nx_settings.h"
 #include "recomp.h"
 #include "recompui/recompui.h"
@@ -24,7 +25,7 @@ void recompui::message_box(const char* msg) {
     fsync(fileno(stderr));
     funlockfile(stderr);
     ErrorApplicationConfig config;
-    errorApplicationCreate(&config, "Bomberman Hero: Recompiled", msg);
+    errorApplicationCreate(&config, BMHNX_DISPLAY_NAME, msg);
     errorApplicationShow(&config);
 }
 
@@ -52,10 +53,8 @@ banjo::AnalogCamMode banjo::get_analog_cam_mode() { return AnalogCamMode::Off; }
 uint32_t banjo::get_analog_cam_sensitivity() { return 50; }
 banjo::NoteSavingMode banjo::get_note_saving_mode() { return NoteSavingMode::Off; }
 // Added to every chunk-range limit of the level view culling (patches/required_patches.c func_800663EC), read every
-// frame: Settings > Video > Extended Render Distance.
-uint32_t banjo::get_render_chunk_radius_count() {
-    return static_cast<uint32_t>(nx::get(nx::Setting::RenderDistance));
-}
+// frame. 0 keeps the game's own ranges; a mod can raise it later.
+uint32_t banjo::get_render_chunk_radius_count() { return 0; }
 banjo::CutsceneAspectRatioMode banjo::get_cutscene_aspect_ratio_mode() {
     return static_cast<CutsceneAspectRatioMode>(nx::get(nx::Setting::CutsceneAspect));
 }

@@ -1,6 +1,7 @@
 // Pause menu for the Switch build. A hotkey (default MINUS, rebindable in the menu or controls.ini) opens it over the
 // game: Continue, Controllers (rebind every input and the hotkey itself), Video Settings (render quality, 4:3
-// letterbox, extended render distance) and Quit.
+// letterbox), Mods (switch the mods in the mods folder on or off), Reset Game (start over, with the mods as chosen)
+// and Quit.
 //
 // While it is open the game is halted: the game thread blocks at its next controller poll
 // (bmhnx_menu_pause_point, called from input_switch.cpp), so no new frames are produced, and the renderer keeps
@@ -26,7 +27,9 @@
 
 #include "nx_controls.h"
 #include "nx_menu_widgets.h"
+#include "nx_mods.h"
 #include "nx_pad.h"
+#include "nx_paths.h"
 #include "nx_settings.h"
 
 extern const char* bmhnx_program_path;   // main_switch.cpp: argv[0], for Restart
@@ -49,12 +52,12 @@ namespace {
     constexpr uint32_t DIRECTIONS = NX_UP | NX_DOWN | NX_LEFT | NX_RIGHT;
     constexpr uint32_t MENU_BUTTONS = NX_A | NX_B | NX_X | NX_Y | DIRECTIONS;
 
-    enum class Screen { Main, Controllers, Video };
-    enum class Modal { None, Capture, ConfirmReset, NoRestart };
+    enum class Screen { Main, Controllers, Video, Mods };
+    enum class Modal { None, Capture, ConfirmReset, ConfirmGameReset, NoRestart };
     enum class ImGuiState { NotStarted, Ready, Failed };
 
     // The items of each screen.
-    enum MainItem { MAIN_CONTINUE, MAIN_CONTROLLERS, MAIN_VIDEO, MAIN_QUIT, MAIN_COUNT };
+    enum MainItem { MAIN_CONTINUE, MAIN_CONTROLLERS, MAIN_VIDEO, MAIN_MODS, MAIN_RESET_GAME, MAIN_QUIT, MAIN_COUNT };
     // Controllers: the hotkey, the 14 N64 inputs (CONTROL_ORDER), then Reset and Back.
     constexpr int CONTROL_HOTKEY = 0;
     constexpr int CONTROL_FIRST_INPUT = 1;
@@ -63,9 +66,9 @@ namespace {
     constexpr int CONTROL_COUNT = CONTROL_BACK + 1;
     // The N64 inputs in the order players think of them (indices into the N64 button table).
     constexpr int CONTROL_ORDER[nx::controls::INPUT_COUNT] = {0, 1, 2, 3, 8, 9, 4, 5, 6, 7, 10, 11, 12, 13};
-    // Video: three settings, Apply and Restart, Back.
-    constexpr Setting VIDEO_SETTINGS[] = {Setting::Resolution, Setting::AspectRatio, Setting::RenderDistance};
-    constexpr int VIDEO_SETTING_COUNT = 3;
+    // Video: two settings, Apply and Restart, Back.
+    constexpr Setting VIDEO_SETTINGS[] = {Setting::Resolution, Setting::AspectRatio};
+    constexpr int VIDEO_SETTING_COUNT = 2;
     constexpr int VIDEO_APPLY = VIDEO_SETTING_COUNT;
     constexpr int VIDEO_BACK = VIDEO_APPLY + 1;
     constexpr int VIDEO_COUNT = VIDEO_BACK + 1;
@@ -75,7 +78,8 @@ namespace {
     ImGuiState imgui_state = ImGuiState::NotStarted;
     Screen screen = Screen::Main;
     Modal modal = Modal::None;
-    int selected[3] = {0, 0, 0};
+    int selected[4] = {0, 0, 0, 0};
+    int mods_top = 0;                   // first visible item of the Mods list
     int controls_top = 0;               // first visible item of the Controllers list
     bool release_pending = false;       // closed, waiting for the pad to be released
     bool needs_release = false;         // ignore actions until every button is up
@@ -199,6 +203,7 @@ namespace {
         case Screen::Main: return MAIN_COUNT;
         case Screen::Controllers: return CONTROL_COUNT;
         case Screen::Video: return VIDEO_COUNT;
+        case Screen::Mods: return nx::mods::count() + 2;  // the mods, Reset Game to Apply, Back
         }
         return 1;
     }
@@ -219,7 +224,17 @@ namespace {
 
     void go_to(Screen next) {
         if (screen == Screen::Video) save_changes();
+        if (next == Screen::Mods) nx::mods::refresh();  // reads the mods folder's list as the runtime has it
         screen = next;
+    }
+
+    // Reset Game and Apply: start the whole game again through the loader, which loads the mods as chosen.
+    void request_game_reset() {
+        if (can_restart()) {
+            leave_game(true);
+        } else {
+            modal = Modal::NoRestart;
+        }
     }
 
     void begin_capture(int row, bool add, const NxPad& pad, uint64_t now) {
@@ -256,6 +271,8 @@ namespace {
             case MAIN_CONTINUE: close_menu(); break;
             case MAIN_CONTROLLERS: go_to(Screen::Controllers); break;
             case MAIN_VIDEO: go_to(Screen::Video); break;
+            case MAIN_MODS: go_to(Screen::Mods); break;
+            case MAIN_RESET_GAME: modal = Modal::ConfirmGameReset; break;
             case MAIN_QUIT: leave_game(false); break;
             }
         }
@@ -289,12 +306,24 @@ namespace {
             if (pressed & NX_A) change_setting(VIDEO_SETTINGS[item], 1, true);
         } else if (item == VIDEO_APPLY && (pressed & NX_A)) {
             if (!nx::restart_pending()) return;
-            if (can_restart()) {
-                leave_game(true);
-            } else {
-                modal = Modal::NoRestart;
-            }
+            request_game_reset();
         } else if (item == VIDEO_BACK && (pressed & NX_A)) {
+            go_to(Screen::Main);
+        }
+        if (pressed & NX_B) go_to(Screen::Main);
+    }
+
+    void handle_mods(uint32_t pressed, uint32_t actions) {
+        if (actions & NX_UP) move_cursor(-1);
+        if (actions & NX_DOWN) move_cursor(1);
+        const int item = cursor();
+        const int mod_count = nx::mods::count();
+        if (item < mod_count) {
+            // A, or either side of the D-pad, flips the mod.
+            if ((pressed & NX_A) || (actions & (NX_LEFT | NX_RIGHT))) nx::mods::toggle(item);
+        } else if (item == mod_count && (pressed & NX_A)) {
+            if (nx::mods::reset_needed()) modal = Modal::ConfirmGameReset;
+        } else if (item == mod_count + 1 && (pressed & NX_A)) {
             go_to(Screen::Main);
         }
         if (pressed & NX_B) go_to(Screen::Main);
@@ -305,6 +334,13 @@ namespace {
             if (pressed & NX_A) {
                 nx::controls::reset_defaults();
                 modal = Modal::None;
+            } else if (pressed & NX_B) {
+                modal = Modal::None;
+            }
+        } else if (modal == Modal::ConfirmGameReset) {
+            if (pressed & NX_A) {
+                modal = Modal::None;
+                request_game_reset();
             } else if (pressed & NX_B) {
                 modal = Modal::None;
             }
@@ -369,6 +405,7 @@ namespace {
         case Screen::Main: handle_main(pressed, actions); break;
         case Screen::Controllers: handle_controllers(pressed, actions, pad, now); break;
         case Screen::Video: handle_video(pressed, actions); break;
+        case Screen::Mods: handle_mods(pressed, actions); break;
         }
     }
 
@@ -405,15 +442,15 @@ namespace {
     }
 
     void draw_main(const Theme& theme) {
-        static const char* LABELS[MAIN_COUNT] = {"Continue", "Controllers", "Video Settings", "Quit"};
+        static const char* LABELS[MAIN_COUNT] = {"Continue", "Controllers", "Video Settings", "Mods", "Reset Game", "Quit"};
         constexpr float WIDTH = 520.0f;
-        constexpr float ROW = 56.0f;
-        constexpr float GAP = 14.0f;
+        constexpr float ROW = 52.0f;
+        constexpr float GAP = 10.0f;
         constexpr float TOP = 96.0f;
         const float height = TOP + static_cast<float>(MAIN_COUNT) * (ROW + GAP) + 50.0f;
         const ImVec2 origin = draw_panel(WIDTH, height, theme);
         ImDrawList* draw = ImGui::GetForegroundDrawList();
-        draw_title(draw, origin, WIDTH, "Bomberman Hero: Recompiled", "Paused", theme);
+        draw_title(draw, origin, WIDTH, BMHNX_DISPLAY_NAME, "Paused", theme);
         for (int i = 0; i < MAIN_COUNT; i++) {
             const float y = origin.y + TOP + i * (ROW + GAP);
             nx::menu::push_button(draw, {origin.x + PANEL_PAD, y}, {origin.x + WIDTH - PANEL_PAD, y + ROW}, LABELS[i],
@@ -505,6 +542,64 @@ namespace {
         draw_footer(draw, origin, WIDTH, HEIGHT, "A  Change / Select     B  Back", theme);
     }
 
+    // Text cut to fit a width, with "..." where it was shortened.
+    std::string fit_text(const std::string& text, float max_width) {
+        if (ImGui::CalcTextSize(text.c_str()).x <= max_width) return text;
+        std::string cut = text;
+        while (!cut.empty() && ImGui::CalcTextSize((cut + "...").c_str()).x > max_width) cut.pop_back();
+        return cut + "...";
+    }
+
+    void draw_mods(const Theme& theme) {
+        constexpr float WIDTH = 820.0f;
+        constexpr float HEIGHT = 640.0f;
+        constexpr float TOP = 112.0f;
+        constexpr float ROW = 46.0f;
+        constexpr float VALUE_WIDTH = 230.0f;
+        const int mod_count = nx::mods::count();
+        const int item_total = mod_count + 2;
+        const float list_height = HEIGHT - TOP - 64.0f;
+        const int visible = static_cast<int>(list_height / ROW);
+        mods_top = std::clamp(mods_top, 0, std::max(0, item_total - visible));
+        if (cursor() < mods_top) mods_top = cursor();
+        if (cursor() >= mods_top + visible) mods_top = cursor() - visible + 1;
+
+        const ImVec2 origin = draw_panel(WIDTH, HEIGHT, theme);
+        ImDrawList* draw = ImGui::GetForegroundDrawList();
+        const std::string folder = fit_text(nx::mods::folder(), WIDTH - 2 * PANEL_PAD);
+        draw_title(draw, origin, WIDTH, "Mods", folder.c_str(), theme);
+        const float left = origin.x + PANEL_PAD;
+        const float right = origin.x + WIDTH - PANEL_PAD;
+        if (mod_count == 0) {
+            // Nothing to list: say where mods go (the Reset and Back rows are still drawn below).
+            draw->AddText({left, origin.y + TOP}, theme.text_dim, "No mods found. Put mod files (.nrm) in the folder above,");
+            draw->AddText({left, origin.y + TOP + ImGui::GetTextLineHeightWithSpacing()}, theme.text_dim,
+                          "then use Reset Game to load them.");
+        }
+        const float list_top = origin.y + TOP + (mod_count == 0 ? 2 * ImGui::GetTextLineHeightWithSpacing() + 8.0f : 0.0f);
+        for (int i = 0; i < visible; i++) {
+            const int item = mods_top + i;
+            if (item >= item_total) break;
+            const float y = list_top + i * ROW;
+            const bool focused = item == cursor();
+            if (item < mod_count) {
+                const std::string name = fit_text(nx::mods::name(item), right - left - VALUE_WIDTH - 24.0f);
+                const char* state = nx::mods::chosen(item) ? "On" : nx::mods::needed(item) ? "On (needed)" : "Off";
+                draw->AddText({left, y + 8.0f}, theme.text, name.c_str());
+                nx::menu::push_button(draw, {right - VALUE_WIDTH, y}, {right, y + ROW - 4.0f}, state, focused, theme);
+            } else if (item == mod_count) {
+                nx::menu::push_button(draw, {left, y}, {right, y + ROW - 4.0f},
+                                      nx::mods::reset_needed() ? "Reset Game to Apply Changes" : "No Changes to Apply",
+                                      focused, theme);
+            } else {
+                nx::menu::push_button(draw, {left, y}, {right, y + ROW - 4.0f}, "Back", focused, theme);
+            }
+        }
+        if (mods_top > 0) draw->AddText({right - 12.0f, origin.y + TOP - 24.0f}, theme.text_dim, "^");
+        if (mods_top + visible < item_total) draw->AddText({right - 12.0f, origin.y + HEIGHT - 52.0f}, theme.text_dim, "v");
+        draw_footer(draw, origin, WIDTH, HEIGHT, "A  Switch on / off     B  Back     Changes apply after a reset", theme);
+    }
+
     void draw_modal(const Theme& theme) {
         ImDrawList* draw = ImGui::GetForegroundDrawList();
         const ImVec2 screen_size{SCREEN_W, SCREEN_H};
@@ -520,6 +615,10 @@ namespace {
         } else if (modal == Modal::ConfirmReset) {
             nx::menu::dialog(draw, screen_size, "Reset controls?",
                              {"Every input and the menu hotkey go back to the defaults."}, "A  Reset     B  Cancel", theme);
+        } else if (modal == Modal::ConfirmGameReset) {
+            nx::menu::dialog(draw, screen_size, "Reset the game?",
+                             {"The game starts over, with your mods as chosen.", "Progress since your last save is lost."},
+                             "A  Reset     B  Cancel", theme);
         } else if (modal == Modal::NoRestart) {
             nx::menu::dialog(draw, screen_size, "Restart not available",
                              {"Your changes are saved. Quit and open the game again", "to apply them."}, "A or B  OK", theme);
@@ -532,6 +631,7 @@ namespace {
         case Screen::Main: draw_main(theme); break;
         case Screen::Controllers: draw_controllers(theme); break;
         case Screen::Video: draw_video(theme); break;
+        case Screen::Mods: draw_mods(theme); break;
         }
         draw_modal(theme);
     }

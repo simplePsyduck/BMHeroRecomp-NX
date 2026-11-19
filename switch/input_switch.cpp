@@ -1,6 +1,6 @@
 // SDL pad -> N64 pad for player 1. The default layout follows PaperBoat-NX (NSO N64 convention):
 // A->A, B->B, ZL->Z, L->L, R/ZR->R, +->Start, right stick->C buttons, D-pad->D-pad. It can be changed in
-// sdmc:/switch/bmherorecomp/controls.ini (nx_controls.cpp).
+// sdmc:/switch/BMHero_nx/config.ini (nx_controls.cpp).
 //
 // All four ports are reported as plugged-in controllers with a Rumble Pak, exactly as BMHero's own
 // get_connected_device_info does in single-player mode (src/main/main.cpp). That matters: patches/required_patches.c

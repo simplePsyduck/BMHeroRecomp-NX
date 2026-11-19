@@ -1,10 +1,10 @@
-# Nintendo Switch build of Bomberman Hero: Recompiled. Own root, like DK64Recomp-NX's switch/ directory, so the
+# Nintendo Switch build of Bomberman Hero (BMHero_nx). Own root, like DK64Recomp-NX's switch/ directory, so the
 # upstream CMakeLists (RT64, RmlUi, X11, Windows/macOS bundles) stays untouched. Build with switch/build.sh.
 #
 # Structure borrowed from DK64Recomp-NX (GPL-3.0). Nothing here includes game assets: RecompiledFuncs/ and
 # RecompiledPatches/ are generated locally from your own ROM by switch/codegen.sh and are git-ignored.
 cmake_minimum_required(VERSION 3.24)
-project(bmherorecomp_nx LANGUAGES C CXX)
+project(BMHero_nx LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -114,7 +114,7 @@ target_compile_definitions(imgui PRIVATE IMGUI_IMPL_OPENGL_LOADER_CUSTOM)
 set_source_files_properties(${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp PROPERTIES COMPILE_OPTIONS "-include;glad/glad.h")
 target_link_libraries(imgui PUBLIC glad)
 
-add_executable(bmherorecomp
+add_executable(BMHero_nx
     ${ROOT}/src/game/debug.cpp
     ${ROOT}/src/game/recomp_api.cpp
     ${ROOT}/src/game/recomp_data_api.cpp
@@ -136,6 +136,7 @@ add_executable(bmherorecomp
     nx_controls.cpp
     nx_settings.cpp
     nx_menu.cpp
+    nx_mods.cpp
     nx_menu_widgets.cpp
     vsync_switch.cpp
     window_switch.c
@@ -146,11 +147,11 @@ if(BMHNX_RENDERER STREQUAL "deko3d")
     if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/render_deko3d.cpp)
         message(FATAL_ERROR "BMHNX_RENDERER=deko3d needs switch/render_deko3d.cpp (Phase 2)")
     endif()
-    target_sources(bmherorecomp PRIVATE render_deko3d.cpp)
-    target_compile_definitions(bmherorecomp PRIVATE BMHNX_HAVE_DEKO3D BMHNX_DEFAULT_DEKO3D)
-    target_link_libraries(bmherorecomp PRIVATE deko3d)
+    target_sources(BMHero_nx PRIVATE render_deko3d.cpp)
+    target_compile_definitions(BMHero_nx PRIVATE BMHNX_HAVE_DEKO3D BMHNX_DEFAULT_DEKO3D)
+    target_link_libraries(BMHero_nx PRIVATE deko3d)
 endif()
-target_include_directories(bmherorecomp PRIVATE
+target_include_directories(BMHero_nx PRIVATE
     ${RECOMP_INCLUDES}
     ${ROOT}/lib/N64ModernRuntime/thirdparty/sse2neon
     ${ROOT}/lib/SlotMap
@@ -158,13 +159,13 @@ target_include_directories(bmherorecomp PRIVATE
     # banjo_config.h includes "json/json.hpp"; BMHeroRecomp's own target finds it through RT64's contrib dir.
     ${ROOT}/lib/rt64/src/contrib
 )
-target_compile_options(bmherorecomp PRIVATE -fno-strict-aliasing -fms-extensions)
+target_compile_options(BMHero_nx PRIVATE -fno-strict-aliasing -fms-extensions)
 # libnx gives std::thread 128 KiB stacks and cannot detach threads: see threads_switch.c.
-target_link_options(bmherorecomp PRIVATE -Wl,--wrap=pthread_create,--wrap=pthread_detach)
+target_link_options(BMHero_nx PRIVATE -Wl,--wrap=pthread_create,--wrap=pthread_detach)
 # The recompiled libraries call into each other in both directions.
 set(CMAKE_CXX_LINK_GROUP_USING_RESCAN "LINKER:--start-group" "LINKER:--end-group")
 set(CMAKE_CXX_LINK_GROUP_USING_RESCAN_SUPPORTED TRUE)
-target_link_libraries(bmherorecomp PRIVATE
+target_link_libraries(BMHero_nx PRIVATE
     "$<LINK_GROUP:RESCAN,PatchesLib,RecompiledFuncs,librecomp,ultramodern>"
     GLideN64
     imgui
@@ -176,15 +177,16 @@ target_link_libraries(bmherorecomp PRIVATE
     nx
 )
 
+# What the launcher shows is "Bomberman Hero" (BMHNX_DISPLAY_NAME in nx_paths.h); the file is BMHero_nx.nro.
 nx_generate_nacp(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/bmherorecomp.nacp
-    NAME "Bomberman Hero: Recompiled"
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/BMHero_nx.nacp
+    NAME "Bomberman Hero"
     AUTHOR "BMHeroRecomp team, Switch port"
     VERSION "0.7.3"
 )
-nx_create_nro(bmherorecomp_nro
-    TARGET bmherorecomp
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/bmherorecomp.nro
+nx_create_nro(BMHero_nx_nro
+    TARGET BMHero_nx
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/BMHero_nx.nro
     ICON ${CMAKE_CURRENT_SOURCE_DIR}/icon.jpg
-    NACP ${CMAKE_CURRENT_BINARY_DIR}/bmherorecomp.nacp
+    NACP ${CMAKE_CURRENT_BINARY_DIR}/BMHero_nx.nacp
 )

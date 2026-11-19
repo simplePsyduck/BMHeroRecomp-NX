@@ -1,6 +1,6 @@
 // Renderer seam. Everything above this line (ultramodern, the game) only sees RendererContext; the backend
 // behind it is picked here. Phase 1 ships GLideN64 on OpenGL (render_gliden64.cpp); Phase 2 adds deko3d
-// (render_deko3d.cpp) as another RendererContext, selected by the renderer = ... line of bmherorecomp.ini
+// (render_deko3d.cpp) as another RendererContext, selected at build time
 // or -DBMHNX_RENDERER=deko3d at build time, with no change to main_switch.cpp or the game layer.
 #pragma once
 

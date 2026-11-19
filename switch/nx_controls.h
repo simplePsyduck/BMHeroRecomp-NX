@@ -1,5 +1,5 @@
 // Switch -> N64 button mapping for player 1, and the menu hotkey: the [controls] section of
-// sdmc:/switch/bmherorecomp/config.ini, changed in the pause menu (Controllers) or by editing the file.
+// sdmc:/switch/BMHero_nx/config.ini, changed in the pause menu (Controllers) or by editing the file.
 #pragma once
 
 #include <cstdint>

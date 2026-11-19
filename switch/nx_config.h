@@ -1,4 +1,4 @@
-// One configuration file for everything the pause menu can change: sdmc:/switch/bmherorecomp/config.ini, with a
+// One configuration file for everything the pause menu can change: sdmc:/switch/BMHero_nx/config.ini, with a
 // [settings] section (video, audio, performance: nx_settings) and a [controls] section (button bindings and the menu
 // hotkey: nx_controls). The menu rewrites the whole file whenever something changes.
 //

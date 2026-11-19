@@ -6,16 +6,17 @@
 #include <string>
 
 #include "nx_controls.h"
+#include "nx_paths.h"
 #include "nx_settings.h"
 
 #ifndef NX_CONFIG_PATH
-#define NX_CONFIG_PATH "sdmc:/switch/bmherorecomp/config.ini"
+#define NX_CONFIG_PATH BMHNX_DATA_DIR "/config.ini"
 #endif
 #ifndef NX_LEGACY_SETTINGS_PATH
-#define NX_LEGACY_SETTINGS_PATH "sdmc:/switch/bmherorecomp/nx_options.txt"
+#define NX_LEGACY_SETTINGS_PATH BMHNX_DATA_DIR "/nx_options.txt"
 #endif
 #ifndef NX_LEGACY_CONTROLS_PATH
-#define NX_LEGACY_CONTROLS_PATH "sdmc:/switch/bmherorecomp/controls.ini"
+#define NX_LEGACY_CONTROLS_PATH BMHNX_DATA_DIR "/controls.ini"
 #endif
 
 namespace {
@@ -57,7 +58,7 @@ namespace {
 
     std::string compose() {
         std::string text =
-            "# Bomberman Hero: Recompiled - Switch configuration\n"
+            "# Bomberman Hero (BMHero_nx) - Switch configuration\n"
             "#\n"
             "# Everything the pause menu can change lives in this one file, and the menu rewrites it whenever you change\n"
             "# something. To edit it by hand, do so while the game is closed. Lines starting with # are ignored; delete\n"

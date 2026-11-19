@@ -14,6 +14,7 @@
 #include <switch.h>
 
 #include "librecomp/helpers.hpp"
+#include "nx_paths.h"
 #include "nx_settings.h"
 
 namespace {
@@ -42,7 +43,7 @@ namespace {
     constexpr u32 HOC_GOVERNOR_MODULE = 3;
     constexpr u64 HOC_CPU_DELAY_MS = 1000;
     constexpr u32 HOC_CPU_GOVERNOR_OFF = 1;
-    constexpr const char* HOC_MARKER = "sdmc:/switch/bmherorecomp/.hoc_override";
+    constexpr const char* HOC_MARKER = BMHNX_DATA_DIR "/.hoc_override";
     // The CPU clock of the console's official boost mode (loading screens), on every model. At the stock docked
     // 1020 MHz the two passes of a 60 fps frame took 17-19 ms in DK Isles, over the 16.7 ms budget.
     constexpr u32 HOC_CPU_MODULE = 0;

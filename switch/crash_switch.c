@@ -1,6 +1,6 @@
 // libnx user exception handler: on a crash, print the faulting context to stdout (nxlink, or
-// sdmc:/switch/bmherorecomp/bmherorecomp.log) as offsets from the module start, which are ELF
-// addresses: `aarch64-none-elf-addr2line -fCe bmherorecomp.elf <offset>`.
+// sdmc:/switch/BMHero_nx/BMHero_nx.log) as offsets from the module start, which are ELF
+// addresses: `aarch64-none-elf-addr2line -fCe BMHero_nx.elf <offset>`.
 #include <stdalign.h>
 #include <stdio.h>
 #include <unistd.h>

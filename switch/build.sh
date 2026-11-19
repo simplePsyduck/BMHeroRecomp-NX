@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds switch/build/bmherorecomp.nro in the official devkitA64 container (needs Docker + git; works from Git Bash).
+# Builds switch/build/BMHero_nx.nro in the official devkitA64 container (needs Docker + git; works from Git Bash).
 # Run switch/codegen.sh once first (it needs your own ROM).
 #   BMHNX_RENDERER=deko3d ./switch/build.sh     # Phase 2 renderer, once switch/render_deko3d.cpp exists
 set -euo pipefail
@@ -7,8 +7,8 @@ cd "$(dirname "$0")/.."
 
 # A failed build leaves the previous .nro in switch/build, and copying that one is an easy mistake (the log then
 # shows an old build). So: old outputs are deleted first, and a failure says so loudly.
-rm -f switch/build/bmherorecomp.nro switch/build/bmherorecomp.elf
-trap 'echo >&2; echo "BUILD FAILED: no new bmherorecomp.nro was produced. Do not copy an old one." >&2' ERR
+rm -f switch/build/BMHero_nx.nro switch/build/BMHero_nx.elf
+trap 'echo >&2; echo "BUILD FAILED: no new BMHero_nx.nro was produced. Do not copy an old one." >&2' ERR
 
 # The pause menu is built from Dear ImGui in the rt64 submodule.
 for f in imgui.cpp imgui_draw.cpp imgui_tables.cpp imgui_widgets.cpp backends/imgui_impl_opengl3.cpp; do
@@ -62,5 +62,5 @@ docker run --rm -e RENDERER="$RENDERER" -v "$ROOT_MOUNT:/work" -w /work/switch d
     /opt/devkitpro/portlibs/switch/bin/aarch64-none-elf-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBMHNX_RENDERER="$RENDERER"
     cmake --build build -j"$(nproc)"
 '
-ls -la switch/build/bmherorecomp.nro
-echo "BUILD OK: switch/build/bmherorecomp.nro, built $(date)"
+ls -la switch/build/BMHero_nx.nro
+echo "BUILD OK: switch/build/BMHero_nx.nro, built $(date)"
