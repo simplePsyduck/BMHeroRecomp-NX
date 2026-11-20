@@ -37,6 +37,8 @@ namespace {
         {"Display", "cutscene_aspect", "Cutscene Aspect Ratio",
          "Original keeps cutscenes at 4:3, Clamp 16:9 limits them to 16:9, Full uses the whole screen.",
          2, {"Original", "Clamp 16:9", "Full"}},
+        {"Display", "show_fps", "FPS Counter",
+         "Shows how many frames per second are on screen, in the top right corner.", 0, OFF_ON},
     };
 
     std::atomic<int> values[COUNT];

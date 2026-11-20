@@ -66,9 +66,10 @@ namespace {
     constexpr int CONTROL_COUNT = CONTROL_BACK + 1;
     // The N64 inputs in the order players think of them (indices into the N64 button table).
     constexpr int CONTROL_ORDER[nx::controls::INPUT_COUNT] = {0, 1, 2, 3, 8, 9, 4, 5, 6, 7, 10, 11, 12, 13};
-    // Video: two settings, Apply and Restart, Back.
-    constexpr Setting VIDEO_SETTINGS[] = {Setting::Resolution, Setting::AspectRatio};
-    constexpr int VIDEO_SETTING_COUNT = 2;
+    // Video: four settings, Apply and Restart, Back. Quality and aspect are read at startup; frame rate and the FPS
+    // counter take effect at once.
+    constexpr Setting VIDEO_SETTINGS[] = {Setting::Resolution, Setting::AspectRatio, Setting::FrameRate, Setting::ShowFps};
+    constexpr int VIDEO_SETTING_COUNT = 4;
     constexpr int VIDEO_APPLY = VIDEO_SETTING_COUNT;
     constexpr int VIDEO_BACK = VIDEO_APPLY + 1;
     constexpr int VIDEO_COUNT = VIDEO_BACK + 1;
@@ -138,12 +139,17 @@ namespace {
         return ImGui_ImplOpenGL3_Init("#version 330 core");
     }
 
-    void open_menu() {
+    // ImGui starts the first time something is drawn: the menu opening, or the FPS counter being on.
+    bool ensure_imgui() {
         if (imgui_state == ImGuiState::NotStarted) {
             imgui_state = start_imgui() ? ImGuiState::Ready : ImGuiState::Failed;
             std::printf("[BMHNX] menu: ImGui %s\n", imgui_state == ImGuiState::Ready ? "ready" : "failed to start");
         }
-        if (imgui_state != ImGuiState::Ready) {
+        return imgui_state == ImGuiState::Ready;
+    }
+
+    void open_menu() {
+        if (!ensure_imgui()) {
             return;  // a menu nobody can see must not halt the game
         }
         screen = Screen::Main;
@@ -247,6 +253,17 @@ namespace {
 
     // Left or right on a choice: no wrap, so the ends stay reachable.
     void change_setting(Setting setting, int direction, bool wrap) {
+        if (setting == Setting::FrameRate) {
+            // A 30 / 60 toggle (the game runs at 30; 60 draws the in-between images). Any other value edited into
+            // config.ini counts as the nearer end.
+            const int fps = nx::get(setting);
+            const int next = wrap ? (fps >= 60 ? 30 : 60) : (direction < 0 ? 30 : 60);
+            if (next != fps) {
+                nx::set(setting, next);
+                settings_changed = true;
+            }
+            return;
+        }
         const nx::SettingInfo& info = nx::info(setting);
         const int count = static_cast<int>(info.choices.size());
         int value = nx::get(setting) + direction;
@@ -505,7 +522,7 @@ namespace {
 
     void draw_video(const Theme& theme) {
         constexpr float WIDTH = 860.0f;
-        constexpr float HEIGHT = 560.0f;
+        constexpr float HEIGHT = 640.0f;
         constexpr float TOP = 92.0f;
         constexpr float ROW = 52.0f;
         constexpr float GAP = 8.0f;
@@ -524,7 +541,11 @@ namespace {
                 char label[64];
                 std::snprintf(label, sizeof(label), "%s%s", info.label, info.needs_restart ? " *" : "");
                 char text[96];
-                std::snprintf(text, sizeof(text), "<  %s  >", info.choices.begin()[value]);
+                if (VIDEO_SETTINGS[i] == Setting::FrameRate) {
+                    std::snprintf(text, sizeof(text), "<  %d fps  >", value >= 60 ? 60 : 30);
+                } else {
+                    std::snprintf(text, sizeof(text), "<  %s  >", info.choices.begin()[value]);
+                }
                 draw->AddText({left, y + 12.0f}, theme.text, label);
                 nx::menu::push_button(draw, {right - VALUE_WIDTH, y}, {right, y + ROW}, text, focused, theme);
             } else {
@@ -636,6 +657,34 @@ namespace {
         draw_modal(theme);
     }
 
+    // ---- The FPS counter: frames put on screen per second, counted at the swap (so 30 in the game's own rate, 60
+    // with the in-between images), refreshed twice a second.
+    uint64_t fps_window_start = 0;
+    int fps_frames = 0;
+    int fps_value = 0;
+    char fps_text[24] = "";
+
+    void count_frame(uint64_t now) {
+        if (fps_window_start == 0) fps_window_start = now;
+        fps_frames++;
+        if (now - fps_window_start >= 500) {
+            fps_value = static_cast<int>(fps_frames * 1000.0 / static_cast<double>(now - fps_window_start) + 0.5);
+            std::snprintf(fps_text, sizeof(fps_text), "%d FPS", fps_value);
+            fps_frames = 0;
+            fps_window_start = now;
+        }
+    }
+
+    void draw_fps(const Theme& theme) {
+        if (fps_text[0] == '\0') return;
+        ImDrawList* draw = ImGui::GetForegroundDrawList();
+        const ImVec2 size = ImGui::CalcTextSize(fps_text);
+        const ImVec2 min{SCREEN_W - size.x - 30.0f, 10.0f};
+        const ImVec2 max{SCREEN_W - 10.0f, 10.0f + size.y + 12.0f};
+        draw->AddRectFilled(min, max, IM_COL32(0, 0, 0, 150), 6.0f);   // dark, so it reads over any scene
+        draw->AddText({min.x + 10.0f, min.y + 6.0f}, theme.text, fps_text);
+    }
+
     // GLideN64 keeps its own GL state cache: the framebuffer binding is put back here, and the ImGui backend restores
     // the rest, so the next emulated frame finds GL as it left it.
     void render(int width, int height, uint64_t now) {
@@ -651,7 +700,8 @@ namespace {
         last_frame_ms = now;
         ImGui_ImplOpenGL3_NewFrame();
         ImGui::NewFrame();
-        draw_menu();
+        if (menu_open.load()) draw_menu();
+        if (nx::get(Setting::ShowFps) != 0) draw_fps(look());
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -666,7 +716,23 @@ bool bmhnx_menu_owns_pad() {
 
 // The menu is open: the renderer presents every refresh so it stays drawn (render_gliden64.cpp).
 extern "C" bool bmhnx_menu_is_open() {
-    return menu_open.load();
+    return menu_open.load() && !bmhnx_is_quitting();
+}
+
+// The FPS the counter last measured (0 until half a second has passed).
+extern "C" int bmhnx_menu_fps() {
+    return fps_value;
+}
+
+// Graphics thread, with the GL context still current (RendererContext::shutdown): ImGui's GL objects and the font
+// service go before the context does.
+extern "C" void bmhnx_menu_shutdown() {
+    if (imgui_state == ImGuiState::Ready) {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui::DestroyContext();
+        if (have_shared_font) plExit();
+    }
+    imgui_state = ImGuiState::Failed;  // nothing may start it again while the app is closing
 }
 
 // Game thread, at its controller poll: stops here while the menu is open (and lets go when the app is quitting).
@@ -678,9 +744,14 @@ extern "C" void bmhnx_menu_pause_point() {
 
 // Graphics thread, right before the swap (declared inside core_switch.cpp's extern "C" block).
 extern "C" void bmhnx_menu_on_swap(int width, int height) {
+    if (bmhnx_is_quitting()) {
+        return;  // closing: nothing here may touch GL or the menu any more
+    }
     const uint64_t now = SDL_GetTicks64();
     update_input(now);
-    if (menu_open.load() && imgui_state == ImGuiState::Ready) {
+    count_frame(now);
+    const bool counter = nx::get(Setting::ShowFps) != 0;
+    if ((menu_open.load() || counter) && ensure_imgui()) {
         render(width, height, now);
     }
 }

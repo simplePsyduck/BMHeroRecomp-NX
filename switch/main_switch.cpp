@@ -103,9 +103,11 @@ namespace {
     }
 
     Thread log_sync_thread;
+    bool log_thread_started = false;
+    std::atomic<bool> log_thread_stop{false};
     void log_sync_loop(void*) {
         // A status line every 2 s for the first minute, then every 20 s.
-        for (unsigned tick = 1;; tick++) {
+        for (unsigned tick = 1; !log_thread_stop.load(); tick++) {
             svcSleepThread(250000000ULL);
             if (tick % (tick < 240 ? 8 : 80) == 0) {
                 bmhnx_log_status();
@@ -119,6 +121,17 @@ namespace {
                 fsync(fileno(stdout));
             }
         }
+    }
+
+    // The homebrew loader reuses this process for the next .nro (Restart) and unmaps this one's code: a thread still
+    // running here would execute unmapped memory and take the whole app down. Every thread this file starts must be
+    // stopped and joined before the return to the loader; the game threads are ultramodern::stop_game_threads().
+    void stop_log_thread() {
+        if (!log_thread_started) return;
+        log_thread_stop = true;
+        threadWaitForExit(&log_sync_thread);
+        threadClose(&log_sync_thread);
+        log_thread_started = false;
     }
 
     std::atomic<bool> quitting{false};
@@ -165,6 +178,7 @@ namespace {
         setvbuf(stdout, log_buffer, _IOFBF, sizeof(log_buffer));
         if (R_SUCCEEDED(threadCreate(&log_sync_thread, log_sync_loop, nullptr, nullptr, 0x4000, 0x3B, -2))) {
             threadStart(&log_sync_thread);
+            log_thread_started = true;
         }
     }
 
@@ -573,7 +587,9 @@ int main(int argc, char** argv) {
     // Everything that has to stop is stopped above; the loader reclaims the rest. _exit skips the global C++
     // destructors, which may wait on threads that are gone, and still runs libnx's cleanup before returning to the
     // loader (which then starts the .nro again after Restart Game).
+    stop_log_thread();
     fflush(nullptr);
+    fsync(fileno(stdout));
 #ifdef BMHNX_REMOTE
     bmhnx_trace("main: _exit");
 #endif

@@ -70,8 +70,8 @@ its thread stops at the next controller poll and the renderer keeps showing the 
 - **Continue** closes it. **Quit** exits the app. **Controllers** rebinds every N64 input and the hotkey (A rebinds,
   Y adds a second Switch input, X unbinds; the hotkey itself cannot be unbound); changes are written to `config.ini`
   as you make them. **Video Settings**: Render Quality (Native 240p, 480p, 720p, 1080p) and Aspect Ratio (16:9 or 4:3
-  letterbox). Both are read once at startup: the menu marks them with * and "Apply Changes and Restart" relaunches
-  the app through the loader (`envSetNextLoad`). **Mods** lists the mods in the mods folder and switches them on or
+  letterbox), both read once at startup (the menu marks them with * and "Apply Changes and Restart" relaunches the
+  app through the loader, `envSetNextLoad`); Frame Rate (30 or 60, live) and FPS Counter (on or off, live). **Mods** lists the mods in the mods folder and switches them on or
   off. **Reset Game** starts the game over (after a confirmation), which loads the mods as chosen.
 - Render quality uses GLideN64's whole-number multiples of the N64's 240 lines, so there is no 360p step (1.5x).
 - Build needs the `switch-glad` portlib (build.sh installs it) and Dear ImGui with its OpenGL 3 backend in
@@ -133,3 +133,17 @@ The names and the folder are set in one place, `nx_paths.h`, and every file that
 of that folder (ROM, stored ROM copy, config, saves, mods) are moved into `sdmc:/switch/BMHero_nx/`; anything that
 already exists in the new folder is left alone, and the old .nro and logs stay behind. Afterwards the old folder can
 be deleted. Put the new `BMHero_nx.nro` in `sdmc:/switch/BMHero_nx/` (create the folder).
+
+## Frame rate and the FPS counter
+Frame Rate is 30 or 60 and applies at once: the game logic stays at 30, and 60 draws the in-between images
+(`nx::above_30()`, read every frame by the swap interval, the pacing and the interpolation). The FPS counter is drawn
+by the same ImGui overlay in the top right corner, counted at the swap (frames actually put on screen, refreshed twice a
+second), and ImGui starts the first time either the menu or the counter needs it.
+
+## Restart and the loader
+The homebrew loader reuses this process for the next .nro and unmaps this one's code. Any thread of ours still running
+then executes unmapped memory and takes the whole app down: that was the restart crash (the log writer thread added
+for buffered logging was never stopped). Every thread started in `main_switch.cpp` must be stopped and joined before
+the return to the loader (`stop_log_thread()`; the game threads are `ultramodern::stop_game_threads()`), the menu's
+ImGui and the font service are shut down on the graphics thread in `RendererContext::shutdown()`, and the menu draws
+and halts nothing once the app is quitting.

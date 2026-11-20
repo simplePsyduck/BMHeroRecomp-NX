@@ -181,7 +181,7 @@ target_link_libraries(BMHero_nx PRIVATE
 nx_generate_nacp(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/BMHero_nx.nacp
     NAME "Bomberman Hero"
-    AUTHOR "BMHeroRecomp team, Switch port"
+    AUTHOR "simplePsyduck"
     VERSION "0.7.3"
 )
 nx_create_nro(BMHero_nx_nro

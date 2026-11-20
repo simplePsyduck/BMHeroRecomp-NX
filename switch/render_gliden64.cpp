@@ -63,6 +63,7 @@ uint32_t bmhnx_dl_buffer_ring[512];  // color buffer of each display list, bit 3
 uint32_t bmhnx_dl_us_ring[512];      // its first pass, in microseconds
 uint32_t bmhnx_dl_us2_ring[512];     // its second pass, 0 without an in-between image
 extern "C" bool bmhnx_menu_is_open();  // nx_menu.cpp
+extern "C" void bmhnx_menu_shutdown();  // nx_menu.cpp
 
 std::atomic<uint32_t> bmhnx_dl_count{0};
 std::atomic<uint32_t> bmhnx_screen_updates{0};
@@ -356,6 +357,7 @@ namespace {
         }
 
         void shutdown() override {
+            bmhnx_menu_shutdown();  // the pause menu's GL objects go before the context does
             if (opened) {
                 RomClosed();
                 PluginShutdown();

@@ -18,6 +18,7 @@ namespace nx {
         MasterVolume,
         BgmVolume,
         CutsceneAspect,   // banjo::CutsceneAspectRatioMode: 0 Original, 1 Clamp16x9, 2 Full
+        ShowFps,          // 0 off, 1 on: frames shown per second in the top right corner, live
         Count
     };
 
